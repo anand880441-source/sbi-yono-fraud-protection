@@ -149,6 +149,8 @@ app.post("/api/report", async (req, res) => {
   try {
     const { url, reporter, source = "dashboard" } = req.body;
 
+    console.log("📝 Report received:", { url, reporter, source });
+
     if (!url) {
       return res.status(400).json({ success: false, error: "URL is required" });
     }
@@ -160,31 +162,29 @@ app.post("/api/report", async (req, res) => {
       source: source,
       status: "pending",
     });
-    await report.save();
 
-    // Try to forward to ML service (but don't fail if it doesn't work)
-    let mlServiceStatus = "not_forwarded";
-    try {
-      const mlResponse = await axios.post(`${ML_SERVICE_URL}/report_fake_app`, {
+    await report.save();
+    console.log("✅ Report saved to database:", report._id);
+
+    // Try to forward to ML service (don't await, let it run in background)
+    axios
+      .post(`${ML_SERVICE_URL}/report_fake_app`, {
         url,
         reporter: reporter || "anonymous",
         source: source,
+      })
+      .catch((e) => {
+        console.log(`⚠️ ML service report forwarding failed: ${e.message}`);
       });
-      console.log(`✅ Report forwarded to ML service: ${url}`);
-      mlServiceStatus = "forwarded";
-    } catch (mlError) {
-      console.log(`⚠️ Could not forward to ML service: ${mlError.message}`);
-      // Don't fail - we already saved to database
-    }
 
     res.json({
       success: true,
       message: "Fake app reported successfully",
       report: report,
-      mlServiceStatus: mlServiceStatus,
     });
   } catch (error) {
-    console.error("Error reporting app:", error.message);
+    console.error("❌ Error reporting app:", error.message);
+    console.error("Stack:", error.stack);
     res.status(500).json({
       success: false,
       error: "Failed to report app",
