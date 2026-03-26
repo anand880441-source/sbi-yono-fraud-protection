@@ -2,11 +2,12 @@
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from sklearn.preprocessing import StandardScaler
 import joblib
 import json
 import os
+import math
 from datetime import datetime
 
 class AdvancedMLModel:
@@ -20,44 +21,36 @@ class AdvancedMLModel:
             'domain_length', 'subdomain_count', 'entropy'
         ]
         self.model_type = None
-        
+    
     def calculate_entropy(self, url):
         """Calculate Shannon entropy of URL"""
-        import math
         prob = [float(url.count(c)) / len(url) for c in set(url)]
-        entropy = -sum([p * math.log(p) / math.log(2.0) for p in prob])
+        entropy = -sum([p * math.log(p) / math.log(2.0) for p in prob if p > 0])
         return entropy
     
     def extract_advanced_features(self, url):
         """Extract advanced features from URL"""
         features = {}
         
-        # Basic features
         features['url_length'] = len(url)
         features['num_dots'] = url.count('.')
         features['num_hyphens'] = url.count('-')
         features['num_slashes'] = url.count('/')
         features['num_underscores'] = url.count('_')
         
-        # Security features
         features['has_ip'] = 1 if any(c.isdigit() for c in url) and url.count('.') >= 3 else 0
         features['has_at'] = 1 if '@' in url else 0
         features['has_https'] = 1 if url.startswith('https') else 0
         features['has_sbi_keyword'] = 1 if 'sbi' in url.lower() else 0
         features['has_yono_keyword'] = 1 if 'yono' in url.lower() else 0
         
-        # Suspicious keywords (expanded list)
-        suspicious = ['download', 'apk', 'update', 'kyc', 'verify', 'click', 'login', 
-                      'secure', 'validate', 'account', 'confirm', 'activate', 'warning',
-                      'alert', 'urgent', 'immediate', 'fix', 'patch', 'upgrade']
+        suspicious = ['download', 'apk', 'update', 'kyc', 'verify', 'click', 'login']
         features['has_suspicious'] = 1 if any(word in url.lower() for word in suspicious) else 0
         
-        # URL structure
         features['num_params'] = url.count('&') + url.count('?')
         features['has_double_slash'] = 1 if '//' in url[8:] else 0
         features['has_redirect'] = 1 if 'redirect' in url.lower() or 'goto' in url.lower() else 0
         
-        # Domain analysis
         try:
             domain = url.split('/')[2] if len(url.split('/')) > 2 else ''
             features['domain_length'] = len(domain)
@@ -66,7 +59,6 @@ class AdvancedMLModel:
             features['domain_length'] = 0
             features['subdomain_count'] = 0
         
-        # Entropy (detect random-looking URLs)
         features['entropy'] = self.calculate_entropy(url)
         
         return list(features.values())
@@ -75,63 +67,40 @@ class AdvancedMLModel:
         """Generate comprehensive training dataset"""
         np.random.seed(42)
         
-        # Legitimate URLs (SBI and other trusted sites)
-        legitimate_patterns = [
-            # SBI domains
-            (['https://www.sbi.co.in', 'https://retail.onlinesbi.com', 'https://yonobusiness.sbi'], 1.0),
-            # Banking domains
-            (['https://www.hdfcbank.com', 'https://www.icicibank.com', 'https://www.axisbank.com'], 0.95),
-            # E-commerce
-            (['https://www.amazon.in', 'https://www.flipkart.com', 'https://paytm.com'], 0.9),
-            # Social media
-            (['https://www.facebook.com', 'https://twitter.com', 'https://www.instagram.com'], 0.85),
-            # Search engines
-            (['https://www.google.com', 'https://www.bing.com', 'https://www.yahoo.com'], 0.9)
-        ]
-        
-        # Fake/Phishing patterns
-        fake_patterns = [
-            # Fake SBI
-            (['sbi-kyc-update.com', 'sbi-secure-verify.com', 'yonobusiness-update.net',
-              'sbi-login-verify.in', 'online-sbi-update.xyz'], 0.0),
-            # Fake banking
-            (['hdfc-secure-login.com', 'icici-update-now.in', 'axis-bank-verify.net'], 0.0),
-            # Suspicious TLDs
-            (['.xyz', '.top', '.club', '.online', '.site', '.tech', '.info'], 0.05),
-            # IP-based
-            (['192.168.1.1', '10.0.0.1', '172.16.0.1'], 0.02)
-        ]
-        
         X_train = []
         y_train = []
         
-        # Generate legitimate samples
-        for domains, weight in legitimate_patterns:
-            for domain in domains:
-                for _ in range(int(n_samples * 0.3 / len(legitimate_patterns))):
-                    features = self.extract_advanced_features(domain)
-                    X_train.append(features)
-                    y_train.append(1)
+        # Legitimate SBI URLs
+        legit_urls = [
+            'https://sbi.co.in', 'https://www.onlinesbi.com', 'https://retail.onlinesbi.com',
+            'https://yonobusiness.sbi', 'https://www.sbi.co.in/web/personal-banking'
+        ]
         
-        # Generate fake samples
-        for patterns, weight in fake_patterns:
-            for pattern in patterns:
-                for _ in range(int(n_samples * 0.5 / len(fake_patterns))):
-                    # Create variations
-                    variations = [
-                        f"http://{pattern}/download/yono.apk",
-                        f"https://{pattern}/login",
-                        f"http://{pattern}/verify-account",
-                        f"https://{pattern}/update-kyc"
-                    ]
-                    for var in variations:
-                        features = self.extract_advanced_features(var)
-                        X_train.append(features)
-                        y_train.append(0)
+        for url in legit_urls:
+            for _ in range(200):
+                features = self.extract_advanced_features(url)
+                X_train.append(features)
+                y_train.append(1)
         
-        # Generate random URLs
-        for _ in range(n_samples - len(X_train)):
-            random_chars = ''.join(np.random.choice(list('abcdefghijklmnopqrstuvwxyz0123456789'), 15))
+        # Fake URLs
+        fake_urls = [
+            'http://sbi-kyc-update.com/download/yono.apk',
+            'http://sbi-secure-verify.com/login',
+            'https://yonobusiness-update.net/verify',
+            'http://192.168.1.100/yono.apk',
+            'https://sbi-verify-account.com'
+        ]
+        
+        for url in fake_urls:
+            for _ in range(200):
+                features = self.extract_advanced_features(url)
+                X_train.append(features)
+                y_train.append(0)
+        
+        # Random URLs
+        for _ in range(2000):
+            random_len = np.random.randint(20, 80)
+            random_chars = ''.join(np.random.choice(list('abcdefghijklmnopqrstuvwxyz0123456789'), random_len))
             random_url = f"https://{random_chars}.com/login"
             features = self.extract_advanced_features(random_url)
             X_train.append(features)
@@ -141,106 +110,33 @@ class AdvancedMLModel:
     
     def train(self):
         """Train ensemble model"""
-        print("🔬 Generating advanced training data...")
+        print("Generating training data...")
         X, y = self.generate_training_data(5000)
         
-        print(f"📊 Training with {len(X)} samples, {len(self.feature_names)} features")
+        print(f"Training with {len(X)} samples, {len(self.feature_names)} features")
         
-        # Split data
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42, stratify=y
-        )
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
         
-        # Scale features
         X_train_scaled = self.scaler.fit_transform(X_train)
         X_test_scaled = self.scaler.transform(X_test)
         
-        # Train Random Forest
-        print("🌲 Training Random Forest...")
-        rf_model = RandomForestClassifier(
-            n_estimators=300,
-            max_depth=20,
-            min_samples_split=5,
-            min_samples_leaf=2,
-            random_state=42,
-            n_jobs=-1
-        )
+        print("Training Random Forest...")
+        rf_model = RandomForestClassifier(n_estimators=200, max_depth=15, random_state=42, n_jobs=-1)
         rf_model.fit(X_train_scaled, y_train)
         
-        # Train Gradient Boosting
-        print("📈 Training Gradient Boosting...")
-        gb_model = GradientBoostingClassifier(
-            n_estimators=200,
-            max_depth=10,
-            learning_rate=0.1,
-            random_state=42
-        )
-        gb_model.fit(X_train_scaled, y_train)
+        accuracy = rf_model.score(X_test_scaled, y_test)
+        print(f"Model accuracy: {accuracy:.2%}")
         
-        # Ensemble predictions
-        rf_pred = rf_model.predict(X_test_scaled)
-        gb_pred = gb_model.predict(X_test_scaled)
-        
-        # Weighted ensemble (70% RF, 30% GB)
-        ensemble_pred = (rf_pred * 0.7 + gb_pred * 0.3) > 0.5
-        
-        # Calculate metrics
-        accuracy = accuracy_score(y_test, ensemble_pred)
-        precision = precision_score(y_test, ensemble_pred)
-        recall = recall_score(y_test, ensemble_pred)
-        f1 = f1_score(y_test, ensemble_pred)
-        
-        print("\n" + "="*50)
-        print("📊 MODEL PERFORMANCE")
-        print("="*50)
-        print(f"✅ Accuracy:  {accuracy:.2%}")
-        print(f"✅ Precision: {precision:.2%}")
-        print(f"✅ Recall:    {recall:.2%}")
-        print(f"✅ F1 Score:  {f1:.2%}")
-        
-        # Cross-validation
-        cv_scores = cross_val_score(rf_model, X_train_scaled, y_train, cv=5)
-        print(f"\n📈 Cross-validation scores: {cv_scores.mean():.2%} (+/- {cv_scores.std():.2%})")
-        
-        # Feature importance
-        feature_importance = pd.DataFrame({
-            'feature': self.feature_names,
-            'importance': rf_model.feature_importances_
-        }).sort_values('importance', ascending=False)
-        
-        print("\n🔍 Top 10 Most Important Features:")
-        print(feature_importance.head(10).to_string(index=False))
-        
-        # Save models
         os.makedirs('models', exist_ok=True)
         joblib.dump(rf_model, 'models/random_forest.pkl')
-        joblib.dump(gb_model, 'models/gradient_boosting.pkl')
         joblib.dump(self.scaler, 'models/scaler.pkl')
-        joblib.dump(self.feature_names, 'models/feature_names.pkl')
-        
-        # Save metrics
-        metrics = {
-            'accuracy': float(accuracy),
-            'precision': float(precision),
-            'recall': float(recall),
-            'f1_score': float(f1),
-            'cv_mean': float(cv_scores.mean()),
-            'cv_std': float(cv_scores.std()),
-            'training_date': datetime.now().isoformat(),
-            'n_samples': len(X),
-            'n_features': len(self.feature_names)
-        }
-        
-        with open('models/metrics.json', 'w') as f:
-            json.dump(metrics, f, indent=2)
         
         self.model = rf_model
-        self.model_type = 'ensemble'
         
-        return metrics
+        return {'accuracy': accuracy}
     
     def predict(self, features):
-        """Predict using ensemble model"""
+        """Predict using model"""
         if self.model is None:
             self.model = joblib.load('models/random_forest.pkl')
             self.scaler = joblib.load('models/scaler.pkl')
@@ -250,11 +146,7 @@ class AdvancedMLModel:
         
         return {
             'is_legitimate': proba[1] > 0.5,
-            'confidence': float(max(proba)),
-            'probabilities': {
-                'legitimate': float(proba[1]),
-                'phishing': float(proba[0])
-            }
+            'confidence': float(max(proba))
         }
 
 if __name__ == "__main__":

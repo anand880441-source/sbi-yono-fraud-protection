@@ -1,73 +1,105 @@
 ﻿import re
 import joblib
 import os
-from advanced_model import AdvancedMLModel
 
 class URLClassifier:
     def __init__(self):
         self.model = None
-        self.advanced_model = AdvancedMLModel()
+        self.scaler = None
         self.use_advanced = False
         
     def extract_features(self, url):
-        """Extract features using advanced model"""
-        return self.advanced_model.extract_advanced_features(url)
+        """Extract features from URL for classification"""
+        features = {}
+        
+        features['length'] = len(url)
+        features['num_dots'] = url.count('.')
+        features['num_hyphens'] = url.count('-')
+        features['num_slashes'] = url.count('/')
+        features['has_ip'] = 1 if re.search(r'\d+\.\d+\.\d+\.\d+', url) else 0
+        features['has_at'] = 1 if '@' in url else 0
+        features['is_https'] = 1 if url.startswith('https') else 0
+        features['has_sbi_keyword'] = 1 if 'sbi' in url.lower() else 0
+        features['has_yono_keyword'] = 1 if 'yono' in url.lower() else 0
+        
+        suspicious = ['download', 'apk', 'update', 'kyc', 'verify', 'click', 'login']
+        features['has_suspicious'] = 1 if any(word in url.lower() for word in suspicious) else 0
+        features['num_params'] = url.count('&') + url.count('?')
+        
+        # Domain analysis
+        try:
+            domain = url.split('/')[2] if len(url.split('/')) > 2 else ''
+            features['domain_length'] = len(domain)
+            features['subdomain_count'] = domain.count('.')
+        except:
+            features['domain_length'] = 0
+            features['subdomain_count'] = 0
+        
+        return list(features.values())
     
-    def train_advanced(self):
-        """Train advanced ML model"""
-        print("🚀 Training advanced ML model...")
-        metrics = self.advanced_model.train()
-        self.use_advanced = True
-        print(f"✅ Model trained! Accuracy: {metrics['accuracy']:.2%}")
-        return metrics
-    
-    def load_advanced_model(self):
-        """Load pre-trained advanced model"""
-        if os.path.exists('models/random_forest.pkl'):
-            self.advanced_model.model = joblib.load('models/random_forest.pkl')
-            self.advanced_model.scaler = joblib.load('models/scaler.pkl')
-            self.use_advanced = True
-            return True
+    def load_model(self):
+        """Load pre-trained model"""
+        try:
+            if os.path.exists('models/random_forest.pkl'):
+                self.model = joblib.load('models/random_forest.pkl')
+                self.scaler = joblib.load('models/scaler.pkl')
+                self.use_advanced = True
+                print("Model loaded successfully")
+                return True
+        except Exception as e:
+            print(f"Error loading model: {e}")
         return False
     
+    def train(self):
+        """Train the model"""
+        from advanced_model import AdvancedMLModel
+        advanced = AdvancedMLModel()
+        metrics = advanced.train()
+        self.model = advanced.model
+        self.scaler = advanced.scaler
+        self.use_advanced = True
+        return metrics
+    
     def predict(self, url):
-        """Predict using advanced model if available"""
-        # Try to load advanced model first
-        if not self.use_advanced:
-            if not self.load_advanced_model():
-                print("⚠️ Advanced model not found. Training new model...")
-                self.train_advanced()
-        
-        # Extract features
+        """Predict if URL is legitimate or fake"""
         features = self.extract_features(url)
         
-        # Get prediction from advanced model
-        result = self.advanced_model.predict(features)
+        if not self.use_advanced:
+            if not self.load_model():
+                self.train()
+        
+        # Scale features if scaler exists
+        if self.scaler:
+            features_scaled = self.scaler.transform([features])
+            proba = self.model.predict_proba(features_scaled)[0]
+        else:
+            proba = self.model.predict_proba([features])[0]
+        
+        is_legitimate = proba[1] > 0.5
+        
+        warning = ""
+        if not is_legitimate:
+            warning = "⚠️ WARNING: This link appears suspicious! Only download YONO from official app stores."
+        else:
+            warning = "✓ This link appears safe. Always verify the URL before entering credentials."
         
         return {
-            'is_legitimate': result['is_legitimate'],
-            'confidence': result['confidence'],
-            'probabilities': result['probabilities'],
+            'is_legitimate': is_legitimate,
+            'confidence': float(max(proba)),
+            'warning': warning,
             'features': {
                 'length': features[0],
                 'num_dots': features[1],
                 'num_hyphens': features[2],
                 'num_slashes': features[3],
-                'has_ip': features[5],
-                'has_at': features[6],
-                'is_https': features[7],
-                'has_sbi_keyword': features[8],
-                'has_yono_keyword': features[9],
-                'has_suspicious': features[10],
-                'num_params': features[11],
-                'entropy': round(features[16], 3)
+                'has_ip': features[4],
+                'has_at': features[5],
+                'is_https': features[6],
+                'has_sbi_keyword': features[7],
+                'has_yono_keyword': features[8],
+                'has_suspicious': features[9],
+                'num_params': features[10],
+                'domain_length': features[11],
+                'subdomain_count': features[12]
             }
         }
-    
-    def train(self):
-        """Alias for train_advanced"""
-        return self.train_advanced()
-    
-    def load_model(self):
-        """Alias for load_advanced_model"""
-        return self.load_advanced_model()
