@@ -3,6 +3,7 @@ const cors = require("cors");
 const axios = require("axios");
 const dotenv = require("dotenv");
 const mongoose = require("mongoose");
+const authRoutes = require('./routes/auth');
 
 // Load environment variables
 dotenv.config();
@@ -94,6 +95,7 @@ app.use(
 );
 
 app.use(express.json());
+app.use('/api/auth', authRoutes);
 
 // ========== Health Check ==========
 app.get("/health", (req, res) => {
