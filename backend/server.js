@@ -25,7 +25,7 @@ mongoose
 
 // ========== MongoDB Models ==========
 
-// Scan Schema
+// Scan Schema - FIXED
 const scanSchema = new mongoose.Schema({
   url: { type: String, required: true },
   isLegitimate: { type: Boolean, required: true },
@@ -34,7 +34,14 @@ const scanSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now },
   source: {
     type: String,
-    enum: ["dashboard", "extension", "whatsapp", "mobile", "bulk"],
+    enum: [
+      "dashboard",
+      "extension",
+      "whatsapp",
+      "mobile",
+      "bulk",
+      "web_dashboard",
+    ],
     default: "dashboard",
   },
   ip: { type: String, default: "unknown" },
@@ -44,11 +51,7 @@ const scanSchema = new mongoose.Schema({
 const reportSchema = new mongoose.Schema({
   url: { type: String, required: true },
   reporter: { type: String, default: "anonymous" },
-  source: {
-    type: String,
-    enum: ["dashboard", "extension", "whatsapp", "mobile"],
-    default: "dashboard",
-  },
+  source: { type: String, default: "dashboard" }, // Removed enum restriction
   status: {
     type: String,
     enum: ["pending", "reviewed", "blocked"],
