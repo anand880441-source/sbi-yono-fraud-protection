@@ -1,0 +1,28 @@
+﻿services:
+  # ML Service
+  - type: web
+    name: sbi-ml-service
+    runtime: python
+    rootDir: ml-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.0
+      - key: MODEL_PATH
+        value: models/url_classifier.pkl
+
+  # Backend API
+  - type: web
+    name: sbi-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: ML_SERVICE_URL
+        value: https://sbi-ml-service.onrender.com
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production

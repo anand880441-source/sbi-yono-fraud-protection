@@ -11,7 +11,7 @@ import {
 import ThreatIntel from "./ThreatIntel/ThreatIntel";
 import "./Dashboard.css";
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
 
 function Dashboard() {
   const [url, setUrl] = useState("");
