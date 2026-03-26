@@ -97,6 +97,151 @@ app.use(
 app.use(express.json());
 app.use("/api/auth", authRoutes);
 
+// ========== AUTH ROUTES (Direct Implementation) ==========
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+
+// User Schema
+const AuthUserSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true, lowercase: true },
+  password: { type: String, required: true },
+  phone: { type: String, default: "" },
+  role: { type: String, default: "user" },
+  loginCount: { type: Number, default: 0 },
+  lastLogin: { type: Date },
+  createdAt: { type: Date, default: Date.now },
+});
+
+AuthUserSchema.pre("save", function (next) {
+  if (!this.isModified("password")) return next();
+  const salt = bcrypt.genSaltSync(10);
+  this.password = bcrypt.hashSync(this.password, salt);
+  next();
+});
+
+AuthUserSchema.methods.comparePassword = function (candidatePassword) {
+  return bcrypt.compareSync(candidatePassword, this.password);
+};
+
+const AuthUser = mongoose.model("AuthUser", AuthUserSchema);
+
+// Register
+app.post("/api/auth/register", async (req, res) => {
+  try {
+    const { name, email, password, phone } = req.body;
+
+    console.log("📝 Register:", email);
+
+    if (!name || !email || !password) {
+      return res
+        .status(400)
+        .json({ error: "Name, email and password required" });
+    }
+
+    const existing = await AuthUser.findOne({ email });
+    if (existing) {
+      return res.status(400).json({ error: "Email already registered" });
+    }
+
+    const user = new AuthUser({ name, email, password, phone });
+    await user.save();
+
+    const token = jwt.sign(
+      { userId: user._id, email: user.email, name: user.name },
+      process.env.JWT_SECRET || "sbi-secret-key",
+      { expiresIn: "7d" },
+    );
+
+    console.log(`✅ Registered: ${email}`);
+
+    res.json({
+      success: true,
+      message: "Registration successful",
+      token,
+      user: { id: user._id, name: user.name, email: user.email },
+    });
+  } catch (error) {
+    console.error("Register error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Login
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    console.log("🔐 Login:", email);
+
+    const user = await AuthUser.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    const isValid = user.comparePassword(password);
+    if (!isValid) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    user.loginCount += 1;
+    user.lastLogin = new Date();
+    await user.save();
+
+    const token = jwt.sign(
+      { userId: user._id, email: user.email, name: user.name },
+      process.env.JWT_SECRET || "sbi-secret-key",
+      { expiresIn: "7d" },
+    );
+
+    console.log(`✅ Logged in: ${email}`);
+
+    res.json({
+      success: true,
+      message: "Login successful",
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        loginCount: user.loginCount,
+      },
+    });
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Forgot Password
+app.post("/api/auth/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await AuthUser.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ error: "Email not found" });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/reset-password?token=${resetToken}`;
+
+    console.log("\n" + "=".repeat(60));
+    console.log("🔑 PASSWORD RESET LINK");
+    console.log("=".repeat(60));
+    console.log(`Email: ${email}`);
+    console.log(`Reset Link: ${resetUrl}`);
+    console.log("=".repeat(60) + "\n");
+
+    res.json({
+      success: true,
+      message: "Reset link sent (check console)",
+      resetLink: resetUrl,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ========== Health Check ==========
 app.get("/health", (req, res) => {
   res.json({
