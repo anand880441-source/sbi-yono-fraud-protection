@@ -7,7 +7,6 @@ const userSchema = new mongoose.Schema({
     password: { type: String, required: true },
     phone: { type: String, default: '' },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
-    isActive: { type: Boolean, default: true },
     loginCount: { type: Number, default: 0 },
     lastLogin: { type: Date },
     createdAt: { type: Date, default: Date.now },
@@ -15,23 +14,22 @@ const userSchema = new mongoose.Schema({
     resetPasswordExpires: Date
 });
 
-// Hash password before saving - Using async/await (FIXED)
-userSchema.pre('save', async function(next) {
+// Hash password before saving
+userSchema.pre('save', function(next) {
+    if (!this.isModified('password')) return next();
+    
     try {
-        if (!this.isModified('password')) {
-            return next();
-        }
-        const salt = await bcrypt.genSalt(10);
-        this.password = await bcrypt.hash(this.password, salt);
+        const salt = bcrypt.genSaltSync(10);
+        this.password = bcrypt.hashSync(this.password, salt);
         next();
-    } catch (error) {
-        next(error);
+    } catch (err) {
+        next(err);
     }
 });
 
-// Compare password method
-userSchema.methods.comparePassword = async function(candidatePassword) {
-    return await bcrypt.compare(candidatePassword, this.password);
+// Compare password
+userSchema.methods.comparePassword = function(candidatePassword) {
+    return bcrypt.compareSync(candidatePassword, this.password);
 };
 
 module.exports = mongoose.model('User', userSchema);
