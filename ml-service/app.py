@@ -82,20 +82,20 @@ async def report_fake_app(request: Request):
         print(f"   Reporter: {reporter}")
         print(f"   Source: {source}")
         
-        # Here you can add database storage
-        
         return {
             "status": "reported",
             "message": "Thank you for reporting. This will be reviewed and blocked.",
             "url": url
         }
     except Exception as e:
-        print(f"Error reporting app: {e}")
+        print(f"Error in report endpoint: {e}")
+        # Always return 200 so backend doesn't fail
         return {
-            "status": "error",
-            "message": str(e)
+            "status": "logged",
+            "message": "Report received (with error)",
+            "error": str(e)
         }
-
+    
 @app.get("/model_metrics")
 async def get_model_metrics():
     """Get model performance metrics"""
