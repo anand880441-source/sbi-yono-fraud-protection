@@ -11,8 +11,7 @@ import {
 import ThreatIntel from "./ThreatIntel/ThreatIntel";
 import "./Dashboard.css";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
-
+const API_URL = process.env.REACT_APP_API_URL || "https://sbi-backend-b5hk.onrender.com/api";
 function Dashboard() {
   const [url, setUrl] = useState("");
   const [result, setResult] = useState(null);
@@ -51,18 +50,39 @@ function Dashboard() {
   };
 
   const reportFakeApp = async () => {
-    if (!url) return;
+    if (!url) {
+      alert("No URL to report");
+      return;
+    }
 
     try {
-      await axios.post(`${API_URL}/report`, {
-        url,
+      console.log("Reporting URL:", url);
+
+      const response = await axios.post(`${API_URL}/report`, {
+        url: url,
         reporter: "dashboard_user",
         source: "web_dashboard",
       });
-      alert("✅ Fake app reported successfully! We will review and block it.");
-      loadReports();
+
+      console.log("Report response:", response.data);
+
+      if (response.data.success) {
+        alert(
+          "✅ Fake app reported successfully! We will review and block it.",
+        );
+        loadReports();
+      } else {
+        alert(
+          "❌ Failed to report: " + (response.data.error || "Unknown error"),
+        );
+      }
     } catch (error) {
-      alert("Failed to report. Please try again.");
+      console.error("Report failed:", error);
+      console.error("Error details:", error.response?.data);
+      alert(
+        "❌ Failed to report. Please try again. Error: " +
+          (error.response?.data?.error || error.message),
+      );
     }
   };
 

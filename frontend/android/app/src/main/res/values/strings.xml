@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SBI YONO SafeGuard</string>
+    <string name="title_activity_main">SBI YONO SafeGuard</string>
+    <string name="package_name">com.sbi.yono.safeguard</string>
+    <string name="custom_url_scheme">com.sbi.yono.safeguard</string>
+</resources>
