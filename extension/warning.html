@@ -1,0 +1,163 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>SBI YONO Security Alert</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .warning-container {
+            max-width: 600px;
+            width: 100%;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header { background: #f44336; padding: 30px; text-align: center; }
+        .header-icon { font-size: 80px; margin-bottom: 10px; }
+        .header h1 { color: white; font-size: 24px; margin-bottom: 10px; }
+        .header p { color: rgba(255,255,255,0.9); font-size: 14px; }
+        .content { padding: 30px; }
+        .url-box {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 13px;
+            border-left: 4px solid #f44336;
+        }
+        .url-box strong { display: block; margin-bottom: 8px; color: #d32f2f; }
+        .confidence {
+            background: #ffebee;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .confidence-label { font-weight: bold; color: #c62828; }
+        .confidence-value { font-size: 28px; font-weight: bold; }
+        .warning-details {
+            background: #fff3e0;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .warning-details h3 { color: #e65100; margin-bottom: 10px; }
+        .warning-details ul { margin-left: 20px; color: #555; }
+        .warning-details li { margin-bottom: 8px; }
+        .buttons { display: flex; gap: 15px; margin-top: 20px; flex-wrap: wrap; }
+        .btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: center;
+            min-width: 140px;
+            transition: transform 0.2s;
+        }
+        .btn:hover { transform: translateY(-2px); }
+        .btn-danger { background: #f44336; color: white; }
+        .btn-primary { background: #0066b3; color: white; }
+        .footer {
+            background: #f5f5f5;
+            padding: 15px;
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+        }
+        .safe-tips {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+        .safe-tips h4 { margin-bottom: 10px; color: #333; }
+        .safe-tips ul { margin-left: 20px; color: #666; font-size: 12px; }
+        .safe-tips li { margin-bottom: 5px; }
+        .debug {
+            background: #f0f0f0;
+            padding: 10px;
+            margin-top: 15px;
+            font-size: 11px;
+            font-family: monospace;
+            border-radius: 5px;
+            display: none;
+        }
+        @media (max-width: 480px) {
+            .buttons { flex-direction: column; }
+            .confidence { flex-direction: column; text-align: center; gap: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="warning-container">
+        <div class="header">
+            <div class="header-icon">🚨⚠️🚨</div>
+            <h1>SECURITY ALERT!</h1>
+            <p>This link may lead to a fake YONO app</p>
+        </div>
+        
+        <div class="content">
+            <div class="url-box">
+                <strong>Suspicious Link Detected:</strong>
+                <span id="urlText">Loading...</span>
+            </div>
+            
+            <div class="confidence">
+                <span class="confidence-label">Detection Confidence:</span>
+                <span class="confidence-value" id="confidenceValue">--%</span>
+            </div>
+            
+            <div class="warning-details">
+                <h3>⚠️ Why this is dangerous:</h3>
+                <ul>
+                    <li>This is NOT the official SBI YONO app download link</li>
+                    <li>Fake apps steal your login credentials and OTPs</li>
+                    <li>Fraudsters can empty your bank account</li>
+                    <li>This app may contain malware or spyware</li>
+                </ul>
+            </div>
+            
+            <div class="buttons">
+                <button class="btn btn-danger" id="closeBtn">Close This Page</button>
+                <button class="btn btn-primary" id="reportBtn">🚨 Report This Fake App</button>
+            </div>
+            
+            <div class="safe-tips">
+                <h4>🔒 How to stay safe:</h4>
+                <ul>
+                    <li>✅ Always download YONO ONLY from Google Play Store or Apple App Store</li>
+                    <li>✅ SBI never asks for OTP, MPIN, or card details via SMS/WhatsApp</li>
+                    <li>✅ Official SBI apps are available at: https://www.sbi.co.in</li>
+                    <li>✅ Never install APK files from unknown sources</li>
+                    <li>✅ Report suspicious links immediately using the report button</li>
+                </ul>
+            </div>
+            
+            <div class="debug" id="debugInfo"></div>
+        </div>
+        
+        <div class="footer">
+            SBI YONO SafeGuard • Protecting customers from digital fraud
+        </div>
+    </div>
+    
+    <script src="warning.js"></script>
+</body>
+</html>

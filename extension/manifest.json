@@ -1,0 +1,36 @@
+﻿{
+  "manifest_version": 3,
+  "name": "SBI YONO SafeGuard",
+  "version": "1.0",
+  "description": "Protects SBI customers from fake YONO apps and phishing links",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "webNavigation",
+    "notifications"
+  ],
+  "host_permissions": [
+    "http://localhost:5000/*",
+    "https://*.sbi.co.in/*",
+    "https://*.onlinesbi.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["warning.html", "warning.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
