@@ -45,3 +45,5 @@ logs/
 # Temporary files
 *.tmp
 *.temp
+*git_status.txt
+*git_changes.txt
