@@ -11,7 +11,8 @@ import {
 import ThreatIntel from "./ThreatIntel/ThreatIntel";
 import "./Dashboard.css";
 
-const API_URL = process.env.REACT_APP_API_URL || "https://sbi-backend-b5hk.onrender.com/api";
+const API_URL =
+  process.env.REACT_APP_API_URL || "https://sbi-backend-b5hk.onrender.com/api";
 function Dashboard() {
   const [url, setUrl] = useState("");
   const [result, setResult] = useState(null);
@@ -112,6 +113,10 @@ function Dashboard() {
           Protecting customers from fake apps and phishing links
         </p>
       </header>
+
+      <div className="sbi-badge">
+        <span>India's Largest Public Sector Bank</span>
+      </div>
 
       <div className="stats-row">
         <div className="stat-card">
