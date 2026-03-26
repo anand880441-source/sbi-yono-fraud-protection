@@ -85,6 +85,7 @@ app.use(
       "https://sbi-yono-fraud-protection.netlify.app",
       "https://*.netlify.app",
       "https://sbi-backend-b5hk.onrender.com",
+      "https://sbi-whatsapp-bot.onrender.com"
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
