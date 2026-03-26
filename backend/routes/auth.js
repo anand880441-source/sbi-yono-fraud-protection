@@ -21,14 +21,17 @@ router.post('/register', async (req, res) => {
             return res.status(400).json({ error: 'Password must be at least 6 characters' });
         }
         
+        // Check if user exists
         const existingUser = await User.findOne({ email });
         if (existingUser) {
             return res.status(400).json({ error: 'Email already registered' });
         }
         
+        // Create user - password will be hashed by pre-save middleware
         const user = new User({ name, email, password, phone });
         await user.save();
         
+        // Generate token
         const token = jwt.sign(
             { userId: user._id, email: user.email, name: user.name, role: user.role },
             process.env.JWT_SECRET || 'sbi-yono-secret-key-2024',
@@ -76,6 +79,7 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
         
+        // Update login stats
         user.loginCount += 1;
         user.lastLogin = new Date();
         await user.save();
