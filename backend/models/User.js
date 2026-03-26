@@ -15,21 +15,23 @@ const userSchema = new mongoose.Schema({
     resetPasswordExpires: Date
 });
 
-// Hash password before saving - FIXED
-userSchema.pre('save', function(next) {
-    const user = this;
-    if (!user.isModified('password')) return next();
-    
-    bcrypt.hash(user.password, 10, (err, hash) => {
-        if (err) return next(err);
-        user.password = hash;
+// Hash password before saving - Using async/await (FIXED)
+userSchema.pre('save', async function(next) {
+    try {
+        if (!this.isModified('password')) {
+            return next();
+        }
+        const salt = await bcrypt.genSalt(10);
+        this.password = await bcrypt.hash(this.password, salt);
         next();
-    });
+    } catch (error) {
+        next(error);
+    }
 });
 
 // Compare password method
-userSchema.methods.comparePassword = function(candidatePassword) {
-    return bcrypt.compare(candidatePassword, this.password);
+userSchema.methods.comparePassword = async function(candidatePassword) {
+    return await bcrypt.compare(candidatePassword, this.password);
 };
 
 module.exports = mongoose.model('User', userSchema);
