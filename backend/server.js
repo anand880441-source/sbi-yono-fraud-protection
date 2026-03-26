@@ -3,7 +3,7 @@ const cors = require("cors");
 const axios = require("axios");
 const dotenv = require("dotenv");
 const mongoose = require("mongoose");
-const authRoutes = require('./routes/auth');
+const authRoutes = require("./routes/auth");
 
 // Load environment variables
 dotenv.config();
@@ -86,7 +86,7 @@ app.use(
       "https://sbi-yono-fraud-protection.netlify.app",
       "https://*.netlify.app",
       "https://sbi-backend-b5hk.onrender.com",
-      "https://sbi-whatsapp-bot.onrender.com"
+      "https://sbi-whatsapp-bot.onrender.com",
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -95,7 +95,7 @@ app.use(
 );
 
 app.use(express.json());
-app.use('/api/auth', authRoutes);
+app.use("/api/auth", authRoutes);
 
 // ========== Health Check ==========
 app.get("/health", (req, res) => {
@@ -106,6 +106,16 @@ app.get("/health", (req, res) => {
     mongodb:
       mongoose.connection.readyState === 1 ? "connected" : "disconnected",
   });
+});
+
+// Temporary debug endpoint
+app.get("/api/debug/users", async (req, res) => {
+  try {
+    const users = await mongoose.model("User").find().select("-password");
+    res.json(users);
+  } catch (error) {
+    res.json({ error: error.message });
+  }
 });
 
 // ========== Detect URL Endpoint (with Database Save) ==========
