@@ -47,3 +47,10 @@ logs/
 *.temp
 *git_status.txt
 *git_changes.txt
+*.env.production
+# Environment variables
+.env
+.env.local
+.env.production
+.env.development
+*.env
