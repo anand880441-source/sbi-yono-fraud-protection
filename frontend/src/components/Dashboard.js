@@ -1,5 +1,5 @@
 ﻿import React, { useState } from "react";
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import axios from "axios";
 import {
@@ -26,11 +26,13 @@ function Dashboard() {
   const [showReports, setShowReports] = useState(false);
   const [activeTab, setActiveTab] = useState("checker");
   const { user, logout } = useAuth();
+  console.log("User in dashboard:", user);
 
-  const handleLogout = () => {
+ const handleLogout = () => {
+    console.log("Logout clicked!");
     logout();
     navigate('/login');
-  };
+};
 
   const detectUrl = async (e) => {
     e.preventDefault();
@@ -115,16 +117,20 @@ function Dashboard() {
   return (
     <div className="dashboard">
       <header className="header">
-        <div className="logo">
-          <FiShield size={32} color="#0066b3" />
-          <h1>SBI YONO Fraud Protection</h1>
-        </div>
-        <p className="tagline">
-          Protecting customers from fake apps and phishing links
-        </p>
-        <div className="user-menu">
-          <span className="user-name">👋 Hello, {user?.name}</span>
-          <button onClick={handleLogout} className="logout-btn">Logout</button>
+        <div className="header-content">
+          <div className="logo">
+            <FiShield size={32} color="#0066b3" />
+            <h1>SBI YONO Fraud Protection</h1>
+          </div>
+          <p className="tagline">
+            Protecting customers from fake apps and phishing links
+          </p>
+          <div className="user-menu">
+            <span className="user-name">👋 Hello, {user?.name}</span>
+            <button onClick={handleLogout} className="logout-btn">
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 
