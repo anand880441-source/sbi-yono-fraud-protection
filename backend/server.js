@@ -4,7 +4,6 @@ const axios = require("axios");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
 require("dotenv").config();
 
 const app = express();
@@ -31,35 +30,16 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// ========== User Schema ==========
+// ========== SIMPLE USER SCHEMA - NO PRE-SAVE MIDDLEWARE ==========
 const userSchema = new mongoose.Schema({
-    name: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
-    phone: { type: String, default: '' },
+    name: String,
+    email: { type: String, unique: true },
+    password: String,
+    phone: String,
     loginCount: { type: Number, default: 0 },
-    lastLogin: { type: Date },
-    createdAt: { type: Date, default: Date.now },
-    resetPasswordToken: String,
-    resetPasswordExpires: Date
+    lastLogin: Date,
+    createdAt: { type: Date, default: Date.now }
 });
-
-// Hash password - using async/await
-userSchema.pre('save', async function(next) {
-    if (!this.isModified('password')) return next();
-    try {
-        const salt = await bcrypt.genSalt(10);
-        this.password = await bcrypt.hash(this.password, salt);
-        next();
-    } catch (err) {
-        next(err);
-    }
-});
-
-// Compare password - async method
-userSchema.methods.comparePassword = async function(candidatePassword) {
-    return await bcrypt.compare(candidatePassword, this.password);
-};
 
 const User = mongoose.model('User', userSchema);
 
@@ -70,27 +50,27 @@ const scanSchema = new mongoose.Schema({
     confidence: Number,
     features: Object,
     timestamp: { type: Date, default: Date.now },
-    source: { type: String, default: 'dashboard' }
+    source: String
 });
 const Scan = mongoose.model('Scan', scanSchema);
 
 // ========== Report Schema ==========
 const reportSchema = new mongoose.Schema({
     url: String,
-    reporter: { type: String, default: 'anonymous' },
-    source: { type: String, default: 'dashboard' },
+    reporter: String,
+    source: String,
     createdAt: { type: Date, default: Date.now }
 });
 const Report = mongoose.model('Report', reportSchema);
 
-// ========== Helper Functions ==========
+// ========== Helper ==========
 function extractDomain(url) {
     try { return new URL(url).hostname; } catch { return url; }
 }
 
-// ========== AUTH ROUTES - ALL USING ASYNC/AWAIT ==========
+// ========== AUTH ROUTES ==========
 
-// REGISTER
+// REGISTER - Hash password manually
 app.post("/api/auth/register", async (req, res) => {
     try {
         const { name, email, password, phone } = req.body;
@@ -106,7 +86,11 @@ app.post("/api/auth/register", async (req, res) => {
             return res.status(400).json({ error: "Email already registered" });
         }
         
-        const user = new User({ name, email, password, phone });
+        // Hash password manually
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+        
+        const user = new User({ name, email, password: hashedPassword, phone });
         await user.save();
         
         const token = jwt.sign(
@@ -130,7 +114,7 @@ app.post("/api/auth/register", async (req, res) => {
     }
 });
 
-// LOGIN
+// LOGIN - Compare password manually
 app.post("/api/auth/login", async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -142,7 +126,9 @@ app.post("/api/auth/login", async (req, res) => {
             return res.status(401).json({ error: "Invalid credentials" });
         }
         
-        const isValid = await user.comparePassword(password);
+        // Compare password manually
+        const isValid = await bcrypt.compare(password, user.password);
+        
         if (!isValid) {
             return res.status(401).json({ error: "Invalid credentials" });
         }
@@ -169,75 +155,6 @@ app.post("/api/auth/login", async (req, res) => {
     } catch (error) {
         console.error("Login error:", error);
         res.status(500).json({ error: error.message });
-    }
-});
-
-// FORGOT PASSWORD
-app.post("/api/auth/forgot-password", async (req, res) => {
-    try {
-        const { email } = req.body;
-        const user = await User.findOne({ email });
-        if (!user) {
-            return res.status(404).json({ error: "Email not found" });
-        }
-        
-        const resetToken = crypto.randomBytes(32).toString("hex");
-        user.resetPasswordToken = resetToken;
-        user.resetPasswordExpires = Date.now() + 3600000;
-        await user.save();
-        
-        const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/reset-password?token=${resetToken}`;
-        
-        console.log("\n🔑 PASSWORD RESET LINK");
-        console.log(`Email: ${email}`);
-        console.log(`Link: ${resetUrl}\n`);
-        
-        res.json({ success: true, message: "Reset link sent (check console)", resetLink: resetUrl });
-        
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// RESET PASSWORD
-app.post("/api/auth/reset-password", async (req, res) => {
-    try {
-        const { token, newPassword } = req.body;
-        
-        const user = await User.findOne({
-            resetPasswordToken: token,
-            resetPasswordExpires: { $gt: Date.now() }
-        });
-        
-        if (!user) {
-            return res.status(400).json({ error: "Invalid or expired token" });
-        }
-        
-        user.password = newPassword;
-        user.resetPasswordToken = undefined;
-        user.resetPasswordExpires = undefined;
-        await user.save();
-        
-        res.json({ success: true, message: "Password reset successful" });
-        
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// GET CURRENT USER
-app.get("/api/auth/me", async (req, res) => {
-    try {
-        const token = req.headers.authorization?.replace("Bearer ", "");
-        if (!token) return res.status(401).json({ error: "No token" });
-        
-        const decoded = jwt.verify(token, JWT_SECRET);
-        const user = await User.findById(decoded.userId).select("-password");
-        
-        res.json({ success: true, user });
-        
-    } catch (error) {
-        res.status(401).json({ error: "Invalid token" });
     }
 });
 
