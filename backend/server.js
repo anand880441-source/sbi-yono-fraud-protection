@@ -61,92 +61,102 @@ function getTimeAgo(date) {
 // ========== AUTH ROUTES ==========
 
 // REGISTER
-app.post("/api/auth/register", async (req, res) => {
-  try {
-    const { name, email, password, phone } = req.body;
+app.post("/api/auth/register", (req, res) => {
+  const { name, email, password, phone } = req.body;
 
-    console.log("📝 Register:", email);
+  console.log("📝 Register:", email);
 
-    if (!name || !email || !password) {
-      return res
-        .status(400)
-        .json({ error: "Name, email and password required" });
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: "Name, email and password required" });
+  }
+
+  User.findOne({ email }, (err, existing) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
     }
-
-    const existing = await User.findOne({ email });
     if (existing) {
       return res.status(400).json({ error: "Email already registered" });
     }
 
     const user = new User({ name, email, password, phone });
-    await user.save();
 
-    const token = jwt.sign(
-      { userId: user._id, email: user.email, name: user.name },
-      JWT_SECRET,
-      { expiresIn: "7d" },
-    );
+    user.save((err, savedUser) => {
+      if (err) {
+        console.error("Save error:", err);
+        return res.status(500).json({ error: err.message });
+      }
 
-    console.log(`✅ Registered: ${email}`);
+      const token = jwt.sign(
+        { userId: savedUser._id, email: savedUser.email, name: savedUser.name },
+        JWT_SECRET,
+        { expiresIn: "7d" },
+      );
 
-    res.json({
-      success: true,
-      message: "Registration successful",
-      token,
-      user: { id: user._id, name: user.name, email: user.email },
+      console.log(`✅ Registered: ${email}`);
+
+      res.json({
+        success: true,
+        message: "Registration successful",
+        token,
+        user: {
+          id: savedUser._id,
+          name: savedUser.name,
+          email: savedUser.email,
+        },
+      });
     });
-  } catch (error) {
-    console.error("Register error:", error);
-    res.status(500).json({ error: error.message });
-  }
+  });
 });
 
-// LOGIN
-app.post("/api/auth/login", async (req, res) => {
-  try {
-    const { email, password } = req.body;
+// LOGIN - Using callback pattern
+app.post("/api/auth/login", (req, res) => {
+  const { email, password } = req.body;
 
-    console.log("🔐 Login:", email);
+  console.log("🔐 Login:", email);
 
-    const user = await User.findOne({ email });
+  User.findOne({ email }, (err, user) => {
+    if (err) {
+      console.error("Find error:", err);
+      return res.status(500).json({ error: err.message });
+    }
     if (!user) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // Use the sync compare method
-    const isValid = user.comparePassword(password);
+    user.comparePassword(password, (err, isMatch) => {
+      if (err) {
+        console.error("Compare error:", err);
+        return res.status(500).json({ error: err.message });
+      }
+      if (!isMatch) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
 
-    if (!isValid) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
+      user.loginCount += 1;
+      user.lastLogin = new Date();
+      user.save();
 
-    user.loginCount += 1;
-    user.lastLogin = new Date();
-    await user.save();
+      const token = jwt.sign(
+        { userId: user._id, email: user.email, name: user.name },
+        JWT_SECRET,
+        { expiresIn: "7d" },
+      );
 
-    const token = jwt.sign(
-      { userId: user._id, email: user.email, name: user.name },
-      JWT_SECRET,
-      { expiresIn: "7d" },
-    );
+      console.log(`✅ Logged in: ${email}`);
 
-    console.log(`✅ Logged in: ${email}`);
-
-    res.json({
-      success: true,
-      message: "Login successful",
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        loginCount: user.loginCount,
-      },
+      res.json({
+        success: true,
+        message: "Login successful",
+        token,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          loginCount: user.loginCount,
+        },
+      });
     });
-  } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ error: error.message });
-  }
+  });
 });
 
 // FORGOT PASSWORD

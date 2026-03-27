@@ -9,24 +9,35 @@ const userSchema = new mongoose.Schema({
   loginCount: { type: Number, default: 0 },
   lastLogin: { type: Date },
   createdAt: { type: Date, default: Date.now },
+  resetPasswordToken: String,
+  resetPasswordExpires: Date,
 });
 
-// Hash password before saving - using sync version to avoid callback issues
+// Pre-save middleware using callback pattern
 userSchema.pre("save", function (next) {
-  if (!this.isModified("password")) return next();
+  const user = this;
 
-  try {
-    const salt = bcrypt.genSaltSync(10);
-    this.password = bcrypt.hashSync(this.password, salt);
-    next();
-  } catch (err) {
-    next(err);
+  if (!user.isModified("password")) {
+    return next();
   }
+
+  bcrypt.genSalt(10, function (err, salt) {
+    if (err) return next(err);
+
+    bcrypt.hash(user.password, salt, function (err, hash) {
+      if (err) return next(err);
+      user.password = hash;
+      next();
+    });
+  });
 });
 
-// Compare password method - using sync
-userSchema.methods.comparePassword = function (candidatePassword) {
-  return bcrypt.compareSync(candidatePassword, this.password);
+// Compare password method using callback pattern
+userSchema.methods.comparePassword = function (candidatePassword, cb) {
+  bcrypt.compare(candidatePassword, this.password, function (err, isMatch) {
+    if (err) return cb(err);
+    cb(null, isMatch);
+  });
 };
 
 module.exports = mongoose.model("User", userSchema);

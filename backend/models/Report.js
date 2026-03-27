@@ -1,9 +1,10 @@
 const mongoose = require('mongoose');
 
 const reportSchema = new mongoose.Schema({
-    url: String,
-    reporter: String,
-    status: { type: String, enum: ['pending', 'blocked', 'reviewed'], default: 'pending' },
+    url: { type: String, required: true },
+    reporter: { type: String, default: 'anonymous' },
+    source: { type: String, default: 'dashboard' },
+    status: { type: String, default: 'pending' },
     createdAt: { type: Date, default: Date.now }
 });
 
