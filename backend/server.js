@@ -2,6 +2,7 @@
 const cors = require("cors");
 const axios = require("axios");
 const mongoose = require("mongoose");
+const rateLimit = require("express-rate-limit");
 const bcrypt = require("bcryptjs");
 const {
   sendFakeUrlAlert,
@@ -38,7 +39,57 @@ app.use(
 );
 app.use(express.json());
 
-// ========== SIMPLE USER SCHEMA - NO PRE-SAVE MIDDLEWARE ==========
+// ========== RATE LIMITING ==========
+
+// General API rate limiter - 100 requests per 15 minutes
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: {
+    error: "Too many requests from this IP. Please try again after 15 minutes.",
+    success: false,
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false,
+});
+
+// Strict limiter for auth endpoints - 5 attempts per 15 minutes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: {
+    error: "Too many authentication attempts. Please try again after 15 minutes.",
+    success: false,
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false,
+});
+
+// Very strict limiter for sensitive operations - 3 attempts per hour
+const sensitiveLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  message: {
+    error: "Too many sensitive operations. Please try again after 1 hour.",
+    success: false,
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply rate limiters to routes
+app.use("/api/detect", generalLimiter);
+app.use("/api/report", generalLimiter);
+app.use("/api/auth/register", authLimiter);
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/forgot-password", authLimiter);
+app.use("/api/auth/reset-password", sensitiveLimiter);
+
+// ========== SCHEMAS ==========
+
+// User Schema
 const userSchema = new mongoose.Schema({
   name: String,
   email: { type: String, unique: true },
@@ -51,7 +102,23 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model("User", userSchema);
 
-// ========== Scan Schema ==========
+// Session Schema
+const sessionSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  token: { type: String, required: true },
+  ip: { type: String, required: true },
+  userAgent: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now },
+  lastActive: { type: Date, default: Date.now },
+  isActive: { type: Boolean, default: true },
+});
+
+// Auto-expire sessions after 7 days
+sessionSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 });
+
+const Session = mongoose.model("Session", sessionSchema);
+
+// Scan Schema
 const scanSchema = new mongoose.Schema({
   url: String,
   isLegitimate: Boolean,
@@ -62,7 +129,7 @@ const scanSchema = new mongoose.Schema({
 });
 const Scan = mongoose.model("Scan", scanSchema);
 
-// ========== Report Schema ==========
+// Report Schema
 const reportSchema = new mongoose.Schema({
   url: String,
   reporter: String,
@@ -71,13 +138,49 @@ const reportSchema = new mongoose.Schema({
 });
 const Report = mongoose.model("Report", reportSchema);
 
-// ========== Helper ==========
+// ========== SESSION VALIDATION MIDDLEWARE ==========
+const validateSession = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (!token) {
+      return res.status(401).json({ error: "No token provided" });
+    }
+
+    const session = await Session.findOne({ token, isActive: true });
+    if (!session) {
+      return res.status(401).json({ error: "Session expired or invalid. Please login again." });
+    }
+
+    session.lastActive = new Date();
+    await session.save();
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    req.session = session;
+    next();
+  } catch (error) {
+    console.error("Session validation error:", error);
+    res.status(401).json({ error: "Invalid session. Please login again." });
+  }
+};
+
+// ========== HELPER FUNCTIONS ==========
 function extractDomain(url) {
   try {
     return new URL(url).hostname;
   } catch {
     return url;
   }
+}
+
+function getTimeAgo(date) {
+  const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+  if (seconds < 60) return `${seconds} sec ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour ago`;
+  return `${Math.floor(hours / 24)} days ago`;
 }
 
 // ========== AUTH ROUTES ==========
@@ -90,9 +193,7 @@ app.post("/api/auth/register", async (req, res) => {
     console.log("📝 Register:", email);
 
     if (!name || !email || !password) {
-      return res
-        .status(400)
-        .json({ error: "Name, email and password required" });
+      return res.status(400).json({ error: "Name, email and password required" });
     }
 
     const existing = await User.findOne({ email });
@@ -105,7 +206,6 @@ app.post("/api/auth/register", async (req, res) => {
 
     // Send welcome email
     try {
-      const { sendWelcomeEmail } = require("./services/emailService");
       await sendWelcomeEmail(email, name);
       console.log(`📧 Welcome email sent to ${email}`);
     } catch (emailError) {
@@ -115,7 +215,7 @@ app.post("/api/auth/register", async (req, res) => {
     const token = jwt.sign(
       { userId: user._id, email: user.email, name: user.name },
       JWT_SECRET,
-      { expiresIn: "7d" },
+      { expiresIn: "7d" }
     );
 
     console.log(`✅ Registered: ${email}`);
@@ -132,10 +232,12 @@ app.post("/api/auth/register", async (req, res) => {
   }
 });
 
-// LOGIN
+// LOGIN - with session tracking
 app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+    const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
+    const userAgent = req.headers["user-agent"] || "unknown";
 
     console.log("🔐 Login:", email);
 
@@ -144,9 +246,7 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // Compare password manually
     const isValid = await bcrypt.compare(password, user.password);
-
     if (!isValid) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
@@ -158,10 +258,19 @@ app.post("/api/auth/login", async (req, res) => {
     const token = jwt.sign(
       { userId: user._id, email: user.email, name: user.name },
       JWT_SECRET,
-      { expiresIn: "7d" },
+      { expiresIn: "7d" }
     );
 
-    console.log(`✅ Logged in: ${email}`);
+    const session = new Session({
+      userId: user._id,
+      token: token,
+      ip: ip,
+      userAgent: userAgent,
+      lastActive: new Date(),
+    });
+    await session.save();
+
+    console.log(`✅ Logged in: ${email} (Session: ${session._id})`);
 
     res.json({
       success: true,
@@ -172,10 +281,143 @@ app.post("/api/auth/login", async (req, res) => {
         name: user.name,
         email: user.email,
         loginCount: user.loginCount,
+        sessionId: session._id,
       },
     });
   } catch (error) {
     console.error("Login error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// LOGOUT - Invalidate session
+app.post("/api/auth/logout", validateSession, async (req, res) => {
+  try {
+    if (req.session) {
+      req.session.isActive = false;
+      await req.session.save();
+      console.log(`🔓 Session invalidated: ${req.session._id}`);
+    }
+    res.json({ success: true, message: "Logged out successfully" });
+  } catch (error) {
+    console.error("Logout error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET ACTIVE SESSIONS
+app.get("/api/auth/sessions", validateSession, async (req, res) => {
+  try {
+    const sessions = await Session.find({
+      userId: req.user.userId,
+      isActive: true,
+    }).sort({ lastActive: -1 });
+
+    const currentToken = req.headers.authorization?.replace("Bearer ", "");
+
+    const formattedSessions = sessions.map((s) => ({
+      id: s._id,
+      ip: s.ip,
+      userAgent: s.userAgent,
+      createdAt: s.createdAt,
+      lastActive: s.lastActive,
+      isCurrent: s.token === currentToken,
+    }));
+
+    res.json({ success: true, sessions: formattedSessions });
+  } catch (error) {
+    console.error("Get sessions error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// REVOKE SESSION
+app.post("/api/auth/revoke-session", validateSession, async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+
+    const session = await Session.findOne({
+      _id: sessionId,
+      userId: req.user.userId,
+      isActive: true,
+    });
+
+    if (!session) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+
+    session.isActive = false;
+    await session.save();
+
+    console.log(`🔓 Session revoked: ${sessionId}`);
+    res.json({ success: true, message: "Session revoked successfully" });
+  } catch (error) {
+    console.error("Revoke session error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET CURRENT USER
+app.get("/api/auth/me", validateSession, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select("-password");
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    res.json({ success: true, user });
+  } catch (error) {
+    console.error("Auth me error:", error);
+    res.status(401).json({ error: "Invalid token" });
+  }
+});
+
+// FORGOT PASSWORD
+app.post("/api/auth/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ error: "Email not found" });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = Date.now() + 3600000;
+    await user.save();
+
+    const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/reset-password?token=${resetToken}`;
+
+    console.log("\n🔑 PASSWORD RESET LINK");
+    console.log(`Email: ${email}`);
+    console.log(`Link: ${resetUrl}\n`);
+
+    res.json({ success: true, message: "Reset link sent (check console)", resetLink: resetUrl });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// RESET PASSWORD
+app.post("/api/auth/reset-password", async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: "Invalid or expired token" });
+    }
+
+    user.password = newPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    res.json({ success: true, message: "Password reset successful" });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -194,7 +436,7 @@ app.get("/test", (req, res) => {
   res.json({ message: "Server is working!", time: new Date() });
 });
 
-app.post("/api/detect", async (req, res) => {
+app.post("/api/detect", validateSession, async (req, res) => {
   try {
     const { url, source = "dashboard" } = req.body;
     if (!url) return res.status(400).json({ error: "URL required" });
@@ -211,13 +453,10 @@ app.post("/api/detect", async (req, res) => {
     });
     await scan.save();
 
-    // Send email alert if fake URL detected and user is logged in
-    if (!mlData.is_legitimate && req.headers.authorization) {
+    // Send email alert if fake URL detected
+    if (!mlData.is_legitimate) {
       try {
-        const token = req.headers.authorization.replace("Bearer ", "");
-        const decoded = jwt.verify(token, JWT_SECRET);
-        const user = await User.findById(decoded.userId);
-
+        const user = await User.findById(req.user.userId);
         if (user && user.email) {
           await sendFakeUrlAlert(user.email, url, mlData.confidence, user.name);
           console.log(`📧 Alert email sent to ${user.email}`);
@@ -234,7 +473,7 @@ app.post("/api/detect", async (req, res) => {
   }
 });
 
-app.post("/api/report", async (req, res) => {
+app.post("/api/report", validateSession, async (req, res) => {
   try {
     const { url, reporter, source = "dashboard" } = req.body;
     if (!url) return res.status(400).json({ error: "URL required" });
@@ -371,16 +610,6 @@ app.get("/api/recent-alerts", async (req, res) => {
   }
 });
 
-function getTimeAgo(date) {
-  const seconds = Math.floor((new Date() - new Date(date)) / 1000);
-  if (seconds < 60) return `${seconds} sec ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour ago`;
-  return `${Math.floor(hours / 24)} days ago`;
-}
-
 app.post("/api/detect-bulk", async (req, res) => {
   try {
     const { urls, source = "bulk" } = req.body;
@@ -404,14 +633,15 @@ app.post("/api/detect-bulk", async (req, res) => {
         } catch (e) {
           return { url, error: e.message };
         }
-      }),
+      })
     );
     res.json({ success: true, results });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
-// Debug route to see all registered routes (for testing)
+
+// Debug route
 app.get("/debug/routes", (req, res) => {
   const routes = [];
   app._router.stack.forEach((middleware) => {
@@ -423,27 +653,6 @@ app.get("/debug/routes", (req, res) => {
     }
   });
   res.json(routes);
-});
-// GET CURRENT USER
-app.get("/api/auth/me", async (req, res) => {
-  try {
-    const token = req.headers.authorization?.replace("Bearer ", "");
-    if (!token) {
-      return res.status(401).json({ error: "No token provided" });
-    }
-
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await User.findById(decoded.userId).select("-password");
-
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    res.json({ success: true, user });
-  } catch (error) {
-    console.error("Auth me error:", error);
-    res.status(401).json({ error: "Invalid token" });
-  }
 });
 
 // ========== START SERVER ==========
