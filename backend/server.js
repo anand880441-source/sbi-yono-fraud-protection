@@ -306,6 +306,29 @@ app.post("/api/detect-bulk", async (req, res) => {
     }
 });
 
+// GET CURRENT USER
+app.get("/api/auth/me", async (req, res) => {
+    try {
+        const token = req.headers.authorization?.replace("Bearer ", "");
+        if (!token) {
+            return res.status(401).json({ error: "No token provided" });
+        }
+        
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const user = await User.findById(decoded.userId).select("-password");
+        
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+        
+        res.json({ success: true, user });
+        
+    } catch (error) {
+        console.error("Auth me error:", error);
+        res.status(401).json({ error: "Invalid token" });
+    }
+});
+
 // ========== START SERVER ==========
 app.listen(PORT, () => {
     console.log(`🚀 Backend running on port ${PORT}`);
