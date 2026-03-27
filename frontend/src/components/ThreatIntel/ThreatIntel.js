@@ -16,30 +16,29 @@ const ThreatIntel = () => {
     const [topThreats, setTopThreats] = useState([]);
     const [threatTypes, setThreatTypes] = useState([]);
     const [alerts, setAlerts] = useState([]);
-    const [loading, setLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
         fetchData();
-        const interval = setInterval(fetchData, 30000); // Refresh every 30 seconds
+        const interval = setInterval(fetchData, 30000);
         return () => clearInterval(interval);
     }, []);
 
     const fetchData = async () => {
-        setLoading(true);
+        setIsLoading(true);
         try {
             // Try to fetch real data from backend
-            const statsResponse = await fetch('http://localhost:5000/api/stats');
+            const statsResponse = await fetch('https://sbi-backend-b5hk.onrender.com/api/stats');
             if (statsResponse.ok) {
                 const statsData = await statsResponse.json();
-                setStats(statsData);
+                setStats(prev => ({ ...prev, ...statsData }));
             }
             
-            const trendsResponse = await fetch('http://localhost:5000/api/trends');
+            const trendsResponse = await fetch('https://sbi-backend-b5hk.onrender.com/api/trends');
             if (trendsResponse.ok) {
                 const trendsData = await trendsResponse.json();
                 setTrends(trendsData);
             } else {
-                // Use mock data
                 setTrends([
                     { time: '00:00', detections: 12, blocked: 10 },
                     { time: '04:00', detections: 8, blocked: 7 },
@@ -50,7 +49,7 @@ const ThreatIntel = () => {
                 ]);
             }
             
-            const threatsResponse = await fetch('http://localhost:5000/api/top-threats');
+            const threatsResponse = await fetch('https://sbi-backend-b5hk.onrender.com/api/top-threats');
             if (threatsResponse.ok) {
                 const threatsData = await threatsResponse.json();
                 setTopThreats(threatsData);
@@ -64,7 +63,6 @@ const ThreatIntel = () => {
                 ]);
             }
             
-            // Threat types for pie chart
             setThreatTypes([
                 { name: 'Fake YONO Apps', value: 45, color: '#f44336' },
                 { name: 'Phishing Links', value: 30, color: '#ff9800' },
@@ -72,7 +70,6 @@ const ThreatIntel = () => {
                 { name: 'Fake KYC', value: 10, color: '#2196f3' }
             ]);
             
-            // Recent alerts
             setAlerts([
                 { id: 1, time: '2 min ago', message: 'New fake YONO app detected: yono-secure-update.com', type: 'critical' },
                 { id: 2, time: '15 min ago', message: 'Phishing attempt blocked: sbi-kyc-verify.net', type: 'high' },
@@ -97,19 +94,8 @@ const ThreatIntel = () => {
                 { domain: 'online-sbi-update.in', count: 45, risk: 'Medium', firstSeen: '2026-03-24' },
                 { domain: 'yonobusiness-verify.com', count: 34, risk: 'Medium', firstSeen: '2026-03-25' }
             ]);
-            setThreatTypes([
-                { name: 'Fake YONO Apps', value: 45, color: '#f44336' },
-                { name: 'Phishing Links', value: 30, color: '#ff9800' },
-                { name: 'APK Malware', value: 15, color: '#9c27b0' },
-                { name: 'Fake KYC', value: 10, color: '#2196f3' }
-            ]);
-            setAlerts([
-                { id: 1, time: '2 min ago', message: 'New fake YONO app detected: yono-secure-update.com', type: 'critical' },
-                { id: 2, time: '15 min ago', message: 'Phishing attempt blocked: sbi-kyc-verify.net', type: 'high' },
-                { id: 3, time: '1 hour ago', message: 'Suspicious APK detected: yono_app_update.apk', type: 'medium' }
-            ]);
         }
-        setLoading(false);
+        setIsLoading(false);
     };
 
     const getRiskColor = (risk) => {
@@ -134,7 +120,6 @@ const ThreatIntel = () => {
 
     const handleBlock = (domain) => {
         alert(`🚨 Blocking ${domain}\n\nThis domain will be added to the blacklist.`);
-        // Here you would call API to block the domain
     };
 
     return (
@@ -240,10 +225,10 @@ const ThreatIntel = () => {
                                 <td className="count-cell">{threat.count}</td>
                                 <td>
                                     <span 
-                                        className={`risk-badge ${threat.risk.toLowerCase()}`}
+                                        className={`risk-badge ${threat.risk?.toLowerCase() || 'low'}`}
                                         style={{ backgroundColor: getRiskColor(threat.risk) }}
                                     >
-                                        {threat.risk}
+                                        {threat.risk || 'Low'}
                                     </span>
                                 </td>
                                 <td>{threat.firstSeen}</td>

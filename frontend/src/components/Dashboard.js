@@ -1,4 +1,6 @@
 ﻿import React, { useState } from "react";
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from "../context/AuthContext";
 import axios from "axios";
 import {
   FiAlertTriangle,
@@ -13,7 +15,9 @@ import "./Dashboard.css";
 
 const API_URL =
   process.env.REACT_APP_API_URL || "https://sbi-backend-b5hk.onrender.com/api";
+
 function Dashboard() {
+  const navigate = useNavigate();
   const [url, setUrl] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -21,6 +25,12 @@ function Dashboard() {
   const [reports, setReports] = useState([]);
   const [showReports, setShowReports] = useState(false);
   const [activeTab, setActiveTab] = useState("checker");
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   const detectUrl = async (e) => {
     e.preventDefault();
@@ -112,6 +122,10 @@ function Dashboard() {
         <p className="tagline">
           Protecting customers from fake apps and phishing links
         </p>
+        <div className="user-menu">
+          <span className="user-name">👋 Hello, {user?.name}</span>
+          <button onClick={handleLogout} className="logout-btn">Logout</button>
+        </div>
       </header>
 
       <div className="sbi-badge">
