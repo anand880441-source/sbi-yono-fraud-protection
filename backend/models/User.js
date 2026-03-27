@@ -11,24 +11,16 @@ const userSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 });
 
-// Simple hash function
-userSchema.pre('save', function(next) {
-    const user = this;
-    if (!user.isModified('password')) return next();
-    
-    bcrypt.hash(user.password, 10, function(err, hash) {
-        if (err) return next(err);
-        user.password = hash;
+// Hash password before saving
+userSchema.pre('save', async function(next) {
+    if (!this.isModified('password')) return next();
+    try {
+        const salt = await bcrypt.genSalt(10);
+        this.password = await bcrypt.hash(this.password, salt);
         next();
-    });
+    } catch (err) {
+        next(err);
+    }
 });
-
-// Simple compare function
-userSchema.methods.comparePassword = function(candidate, cb) {
-    bcrypt.compare(candidate, this.password, function(err, isMatch) {
-        if (err) return cb(err);
-        cb(null, isMatch);
-    });
-};
 
 module.exports = mongoose.model('User', userSchema);

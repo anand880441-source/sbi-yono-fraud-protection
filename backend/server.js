@@ -159,12 +159,15 @@ app.post("/api/auth/login", async (req, res) => {
 
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(401).json({ error: "Invalid email or password" });
+      return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    const isValid = await user.comparePassword(password);
+    // Use bcrypt directly instead of comparePassword method
+    const bcrypt = require("bcryptjs");
+    const isValid = await bcrypt.compare(password, user.password);
+
     if (!isValid) {
-      return res.status(401).json({ error: "Invalid email or password" });
+      return res.status(401).json({ error: "Invalid credentials" });
     }
 
     user.loginCount += 1;
