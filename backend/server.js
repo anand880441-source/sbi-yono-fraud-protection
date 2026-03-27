@@ -3,6 +3,10 @@ const cors = require("cors");
 const axios = require("axios");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
+const {
+  sendFakeUrlAlert,
+  sendWelcomeEmail,
+} = require("./services/emailService");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
@@ -78,7 +82,7 @@ function extractDomain(url) {
 
 // ========== AUTH ROUTES ==========
 
-// REGISTER - Hash password manually
+// REGISTER
 app.post("/api/auth/register", async (req, res) => {
   try {
     const { name, email, password, phone } = req.body;
@@ -96,12 +100,17 @@ app.post("/api/auth/register", async (req, res) => {
       return res.status(400).json({ error: "Email already registered" });
     }
 
-    // Hash password manually
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    const user = new User({ name, email, password: hashedPassword, phone });
+    const user = new User({ name, email, password, phone });
     await user.save();
+
+    // Send welcome email
+    try {
+      const { sendWelcomeEmail } = require("./services/emailService");
+      await sendWelcomeEmail(email, name);
+      console.log(`📧 Welcome email sent to ${email}`);
+    } catch (emailError) {
+      console.error("Failed to send welcome email:", emailError.message);
+    }
 
     const token = jwt.sign(
       { userId: user._id, email: user.email, name: user.name },
@@ -123,7 +132,7 @@ app.post("/api/auth/register", async (req, res) => {
   }
 });
 
-// LOGIN - Compare password manually
+// LOGIN
 app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -191,18 +200,36 @@ app.post("/api/detect", async (req, res) => {
     if (!url) return res.status(400).json({ error: "URL required" });
 
     const response = await axios.post(`${ML_SERVICE_URL}/detect_url`, { url });
+    const mlData = response.data;
 
     const scan = new Scan({
       url,
-      isLegitimate: response.data.is_legitimate,
-      confidence: response.data.confidence,
-      features: response.data.features || {},
+      isLegitimate: mlData.is_legitimate,
+      confidence: mlData.confidence,
+      features: mlData.features || {},
       source,
     });
     await scan.save();
 
-    res.json({ success: true, data: response.data });
+    // Send email alert if fake URL detected and user is logged in
+    if (!mlData.is_legitimate && req.headers.authorization) {
+      try {
+        const token = req.headers.authorization.replace("Bearer ", "");
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const user = await User.findById(decoded.userId);
+
+        if (user && user.email) {
+          await sendFakeUrlAlert(user.email, url, mlData.confidence, user.name);
+          console.log(`📧 Alert email sent to ${user.email}`);
+        }
+      } catch (emailError) {
+        console.error("Failed to send alert email:", emailError.message);
+      }
+    }
+
+    res.json({ success: true, data: mlData });
   } catch (error) {
+    console.error("Detection error:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
