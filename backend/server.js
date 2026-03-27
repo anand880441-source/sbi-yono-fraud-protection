@@ -26,8 +26,8 @@ const userSchema = new mongoose.Schema({
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true, lowercase: true },
     password: { type: String, required: true },
-    phone: { type: String, default: '' },
-    role: { type: String, default: 'user' },
+    phone: { type: String, default: "" },
+    role: { type: String, default: "user" },
     loginCount: { type: Number, default: 0 },
     lastLogin: { type: Date },
     createdAt: { type: Date, default: Date.now },
@@ -35,8 +35,8 @@ const userSchema = new mongoose.Schema({
     resetPasswordExpires: Date
 });
 
-userSchema.pre('save', function(next) {
-    if (!this.isModified('password')) return next();
+userSchema.pre("save", function(next) {
+    if (!this.isModified("password")) return next();
     const salt = bcrypt.genSaltSync(10);
     this.password = bcrypt.hashSync(this.password, salt);
     next();
@@ -46,9 +46,9 @@ userSchema.methods.comparePassword = function(candidatePassword) {
     return bcrypt.compareSync(candidatePassword, this.password);
 };
 
-const User = mongoose.model('User', userSchema);
+const User = mongoose.model("User", userSchema);
 
-// ========== Scan Schema ==========
+// ========== Scan and Report Schemas ==========
 const scanSchema = new mongoose.Schema({
     url: { type: String, required: true },
     isLegitimate: { type: Boolean, required: true },
@@ -67,8 +67,8 @@ const reportSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 });
 
-const Scan = mongoose.model('Scan', scanSchema);
-const Report = mongoose.model('Report', reportSchema);
+const Scan = mongoose.model("Scan", scanSchema);
+const Report = mongoose.model("Report", reportSchema);
 
 // ========== Helper Functions ==========
 function extractDomain(url) {
@@ -362,6 +362,27 @@ app.get("/api/recent-alerts", async (req, res) => {
         res.json(alerts);
     } catch (error) {
         res.status(500).json({ error: "Failed to fetch alerts" });
+    }
+});
+
+app.post("/api/detect-bulk", async (req, res) => {
+    try {
+        const { urls, source = "bulk" } = req.body;
+        if (!urls || !Array.isArray(urls)) return res.status(400).json({ error: "URLs array required" });
+        
+        const results = await Promise.all(urls.map(async (url) => {
+            try {
+                const response = await axios.post(`${ML_SERVICE_URL}/detect_url`, { url });
+                const scan = new Scan({ url, isLegitimate: response.data.is_legitimate, confidence: response.data.confidence, features: response.data.features || {}, source });
+                await scan.save();
+                return { url, ...response.data };
+            } catch (e) {
+                return { url, error: e.message };
+            }
+        }));
+        res.json({ success: true, results });
+    } catch (error) {
+        res.status(500).json({ error: "Failed to process bulk detection" });
     }
 });
 
