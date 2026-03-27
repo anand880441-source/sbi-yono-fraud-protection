@@ -386,6 +386,11 @@ app.post("/api/detect-bulk", async (req, res) => {
     }
 });
 
+// Simple test endpoint - add this
+app.get("/test", (req, res) => {
+    res.json({ message: "Server is working!", time: new Date() });
+});
+
 // ========== Start Server ==========
 app.listen(PORT, () => {
     console.log(`🚀 Backend running on http://localhost:${PORT}`);
