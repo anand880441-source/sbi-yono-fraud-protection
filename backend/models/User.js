@@ -14,22 +14,21 @@ const userSchema = new mongoose.Schema({
     resetPasswordExpires: Date
 });
 
-// Hash password before saving
-userSchema.pre('save', function(next) {
+// Hash password before saving - using async/await
+userSchema.pre('save', async function(next) {
     if (!this.isModified('password')) return next();
-    
     try {
-        const salt = bcrypt.genSaltSync(10);
-        this.password = bcrypt.hashSync(this.password, salt);
+        const salt = await bcrypt.genSalt(10);
+        this.password = await bcrypt.hash(this.password, salt);
         next();
     } catch (err) {
         next(err);
     }
 });
 
-// Compare password
-userSchema.methods.comparePassword = function(candidatePassword) {
-    return bcrypt.compareSync(candidatePassword, this.password);
+// Compare password - async version
+userSchema.methods.comparePassword = async function(candidatePassword) {
+    return await bcrypt.compare(candidatePassword, this.password);
 };
 
 module.exports = mongoose.model('User', userSchema);
