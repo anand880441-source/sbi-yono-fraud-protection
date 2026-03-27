@@ -101,55 +101,6 @@ app.post("/api/auth/register", async (req, res) => {
   }
 });
 
-// LOGIN - Using callback for comparePassword
-app.post("/api/auth/login", (req, res) => {
-  const { email, password } = req.body;
-
-  console.log("🔐 Login:", email);
-
-  User.findOne({ email }, (err, user) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    if (!user) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    user.comparePassword(password, (err, isMatch) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      if (!isMatch) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
-
-      user.loginCount += 1;
-      user.lastLogin = new Date();
-      user.save();
-
-      const token = jwt.sign(
-        { userId: user._id, email: user.email, name: user.name },
-        JWT_SECRET,
-        { expiresIn: "7d" },
-      );
-
-      console.log(`✅ Logged in: ${email}`);
-
-      res.json({
-        success: true,
-        message: "Login successful",
-        token,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          loginCount: user.loginCount,
-        },
-      });
-    });
-  });
-});
-
 // LOGIN
 app.post("/api/auth/login", async (req, res) => {
   try {
@@ -162,9 +113,8 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // Use bcrypt directly instead of comparePassword method
-    const bcrypt = require("bcryptjs");
-    const isValid = await bcrypt.compare(password, user.password);
+    // Use the sync compare method
+    const isValid = user.comparePassword(password);
 
     if (!isValid) {
       return res.status(401).json({ error: "Invalid credentials" });
@@ -215,9 +165,12 @@ app.post("/api/auth/forgot-password", async (req, res) => {
 
     const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:3000"}/reset-password?token=${resetToken}`;
 
-    console.log("\n🔑 PASSWORD RESET LINK");
+    console.log("\n" + "=".repeat(60));
+    console.log("🔑 PASSWORD RESET LINK");
+    console.log("=".repeat(60));
     console.log(`Email: ${email}`);
-    console.log(`Link: ${resetUrl}\n`);
+    console.log(`Reset Link: ${resetUrl}`);
+    console.log("=".repeat(60) + "\n");
 
     res.json({
       success: true,
@@ -261,9 +214,7 @@ app.get("/api/auth/me", async (req, res) => {
     if (!token) return res.status(401).json({ error: "No token" });
 
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await User.findById(decoded.userId).select(
-      "-password -resetPasswordToken -resetPasswordExpires",
-    );
+    const user = await User.findById(decoded.userId).select("-password");
 
     res.json({ success: true, user });
   } catch (error) {
