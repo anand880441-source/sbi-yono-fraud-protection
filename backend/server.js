@@ -5,7 +5,6 @@ const dotenv = require("dotenv");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
 
 dotenv.config();
 
@@ -21,7 +20,7 @@ mongoose.connect(MONGODB_URI)
     .then(() => console.log("✅ MongoDB connected successfully"))
     .catch((err) => console.error("❌ MongoDB connection error:", err));
 
-// ========== User Schema ==========
+// ========== User Schema - FIXED ==========
 const userSchema = new mongoose.Schema({
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
@@ -33,15 +32,22 @@ const userSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 });
 
-userSchema.pre("save", function(next) {
-    if (!this.isModified("password")) return next();
-    const salt = bcrypt.genSaltSync(10);
-    this.password = bcrypt.hashSync(this.password, salt);
-    next();
+// FIXED: Async/await pre-save hook
+userSchema.pre("save", async function(next) {
+    if (!this.isModified("password")) {
+        return next();
+    }
+    try {
+        const salt = await bcrypt.genSalt(10);
+        this.password = await bcrypt.hash(this.password, salt);
+        next();
+    } catch (err) {
+        next(err);
+    }
 });
 
-userSchema.methods.comparePassword = function(candidatePassword) {
-    return bcrypt.compareSync(candidatePassword, this.password);
+userSchema.methods.comparePassword = async function(candidatePassword) {
+    return await bcrypt.compare(candidatePassword, this.password);
 };
 
 const User = mongoose.model("User", userSchema);
@@ -71,16 +77,6 @@ const Report = mongoose.model("Report", reportSchema);
 // ========== Helper Functions ==========
 function extractDomain(url) {
     try { return new URL(url).hostname; } catch { return url; }
-}
-
-function getTimeAgo(date) {
-    const seconds = Math.floor((new Date() - new Date(date)) / 1000);
-    if (seconds < 60) return `${seconds} sec ago`;
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes} min ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} hour ago`;
-    return `${Math.floor(hours / 24)} days ago`;
 }
 
 // ========== CORS ==========
@@ -149,7 +145,7 @@ app.post("/api/auth/login", async (req, res) => {
             return res.status(401).json({ error: "Invalid credentials" });
         }
         
-        const isValid = user.comparePassword(password);
+        const isValid = await user.comparePassword(password);
         if (!isValid) {
             return res.status(401).json({ error: "Invalid credentials" });
         }
